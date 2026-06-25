@@ -1,0 +1,27 @@
+{
+  "short_name": "Placements",
+  "name": "Placement Pulse — Campus Drive Tracker",
+  "description": "Track college placement drives with real-time alerts.",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/",
+  "start_url": ".",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0d1718",
+  "background_color": "#0d1718",
+  "categories": ["education", "productivity"]
+}

@@ -1,0 +1,132 @@
+.placement-app {
+  position: relative;
+  min-height: 100vh;
+  background: #0d1718;
+  overflow-x: hidden;
+  font-family: "Manrope", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: "Sora", "Manrope", sans-serif;
+}
+
+/* Calm ambient mesh — muted teal / soft slate-blue / sage */
+.mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.placement-app > *:not(.mesh-bg) {
+  position: relative;
+  z-index: 1;
+}
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  opacity: 0.42;
+}
+.blob-a {
+  width: 46vw;
+  height: 46vw;
+  background: #178a7a; /* muted teal */
+  top: -12vw;
+  left: -10vw;
+  animation: float-a 22s ease-in-out infinite;
+}
+.blob-b {
+  width: 42vw;
+  height: 42vw;
+  background: #3b6ea5; /* soft slate blue */
+  top: 24vh;
+  right: -14vw;
+  animation: float-b 26s ease-in-out infinite;
+}
+.blob-c {
+  width: 38vw;
+  height: 38vw;
+  background: #7c9a6b; /* sage green */
+  bottom: -14vw;
+  left: 18vw;
+  animation: float-c 30s ease-in-out infinite;
+}
+@keyframes float-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4vw, 3vh) scale(1.08); }
+}
+@keyframes float-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-4vw, 4vh) scale(1.1); }
+}
+@keyframes float-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(3vw, -4vh) scale(1.06); }
+}
+
+/* Subtle grain overlay for depth */
+.mesh-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+/* Card entrance */
+.job-card {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Loading splash */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: #0d1718;
+  animation: splashFade 0.5s ease forwards;
+  animation-delay: 0.95s;
+}
+.splash-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
+  box-shadow: 0 12px 44px rgba(23, 138, 122, 0.35);
+  animation: logoPulse 1.6s ease-in-out infinite;
+}
+.splash-title {
+  color: #e6f2ef;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.splash-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.14);
+  border-top-color: #2dd4bf;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 0.85; }
+}
+@keyframes splashFade {
+  to { opacity: 0; visibility: hidden; }
+}
+
+::selection {
+  background: rgba(45, 212, 191, 0.3);
+}
