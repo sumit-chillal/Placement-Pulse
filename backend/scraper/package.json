@@ -10,7 +10,7 @@
     "run:once": "node index.js --once"
   },
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "dependencies": {
     "@google/genai": "^2.9.0",
