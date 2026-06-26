@@ -180,7 +180,42 @@ async def unsubscribe(body: TokenIn):
         "failureCount": resp.failure_count,
     }
 
+@api_router.post("/test-notification")
+async def send_test_notification():
+    """
+    Send a test notification to every device subscribed to the
+    placement_alerts topic.
+    """
+    try:
+        _get_firebase()
 
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title="🎉 Placement Pulse",
+                body="Push notifications are working successfully!",
+            ),
+            data={
+                "type": "test",
+                "title": "Placement Pulse",
+                "body": "Push notifications are working successfully!"
+            },
+            topic=FCM_TOPIC,
+        )
+
+        message_id = messaging.send(message)
+
+        return {
+            "success": True,
+            "message": "Notification sent successfully.",
+            "messageId": message_id,
+            "topic": FCM_TOPIC,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send notification: {str(e)}",
+        )
 
 # Include the router in the main app
 app.include_router(api_router)

@@ -98,3 +98,7 @@ credentials.json
 !/frontend/
 !/README.md
 !/.gitignore
+
+# Firebase
+.firebase/
+.firebaserc
