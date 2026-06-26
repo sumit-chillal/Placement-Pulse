@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, messaging
+import json
 
 
 ROOT_DIR = Path(__file__).parent
@@ -52,13 +53,27 @@ _fb_app = None
 
 def _get_firebase():
     global _fb_app
-    if _fb_app is None:
-        path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
-        if not path or not os.path.exists(path):
-            raise RuntimeError('Firebase service account not configured')
+
+    if _fb_app is not None:
+        return _fb_app
+
+    # Railway: JSON stored as an environment variable
+    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+    if service_account_json:
+        cred = credentials.Certificate(json.loads(service_account_json))
+        _fb_app = firebase_admin.initialize_app(cred)
+        return _fb_app
+
+    # Local development: JSON file
+    path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+
+    if path and os.path.exists(path):
         cred = credentials.Certificate(path)
         _fb_app = firebase_admin.initialize_app(cred)
-    return _fb_app
+        return _fb_app
+
+    raise RuntimeError("Firebase service account not configured")
 
 
 class TokenIn(BaseModel):
