@@ -55,22 +55,17 @@ export default function Dashboard() {
     });
   }, [jobs, query, fromDate, toDate]);
 
-const enableAlerts = async () => {
-  const res = await initPush();
-
-  console.log("initPush result:", res);
-
-  if (res?.ok) {
-    setAlertsOn(true);
-    alert("You're subscribed!");
-  } else if (res?.reason === "not-configured") {
-    alert("Push alerts need Firebase config.");
-  } else if (res?.reason === "denied") {
-    alert("Notifications are blocked.");
-  } else {
-    alert("Push failed: " + JSON.stringify(res));
-  }
-};
+  const enableAlerts = async () => {
+    const res = await initPush();
+    if (res?.ok) {
+      setAlertsOn(true);
+      alert('You’re subscribed! You’ll get a notification whenever a new drive is posted.');
+    } else if (res?.reason === 'not-configured') {
+      alert('Push alerts need the Firebase web config + VAPID key set in the frontend .env.');
+    } else if (res?.reason === 'denied') {
+      alert('Notifications are blocked. Enable them in your browser settings to get drive alerts.');
+    }
+  };
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-16 pt-6">
