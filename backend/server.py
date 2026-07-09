@@ -11,7 +11,6 @@ import uuid
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, messaging
-import json
 
 
 ROOT_DIR = Path(__file__).parent
@@ -53,27 +52,13 @@ _fb_app = None
 
 def _get_firebase():
     global _fb_app
-
-    if _fb_app is not None:
-        return _fb_app
-
-    # Railway: JSON stored as an environment variable
-    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-
-    if service_account_json:
-        cred = credentials.Certificate(json.loads(service_account_json))
-        _fb_app = firebase_admin.initialize_app(cred)
-        return _fb_app
-
-    # Local development: JSON file
-    path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
-
-    if path and os.path.exists(path):
+    if _fb_app is None:
+        path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
+        if not path or not os.path.exists(path):
+            raise RuntimeError('Firebase service account not configured')
         cred = credentials.Certificate(path)
         _fb_app = firebase_admin.initialize_app(cred)
-        return _fb_app
-
-    raise RuntimeError("Firebase service account not configured")
+    return _fb_app
 
 
 class TokenIn(BaseModel):
@@ -195,42 +180,7 @@ async def unsubscribe(body: TokenIn):
         "failureCount": resp.failure_count,
     }
 
-@api_router.post("/test-notification")
-async def send_test_notification():
-    """
-    Send a test notification to every device subscribed to the
-    placement_alerts topic.
-    """
-    try:
-        _get_firebase()
 
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title="🎉 Placement Pulse",
-                body="Push notifications are working successfully!",
-            ),
-            data={
-                "type": "test",
-                "title": "Placement Pulse",
-                "body": "Push notifications are working successfully!"
-            },
-            topic=FCM_TOPIC,
-        )
-
-        message_id = messaging.send(message)
-
-        return {
-            "success": True,
-            "message": "Notification sent successfully.",
-            "messageId": message_id,
-            "topic": FCM_TOPIC,
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send notification: {str(e)}",
-        )
 
 # Include the router in the main app
 app.include_router(api_router)
