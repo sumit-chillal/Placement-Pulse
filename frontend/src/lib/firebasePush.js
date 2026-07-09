@@ -85,15 +85,7 @@ export async function initPush({ silent = false } = {}) {
 
     return { ok: true, token };
   } catch (err) {
-  console.error("FULL ERROR:", err);
-  console.error("CODE:", err.code);
-  console.error("MESSAGE:", err.message);
-  console.error("STACK:", err.stack);
-
-  return {
-    ok: false,
-    reason: err.code,
-    message: err.message,
-  };
-}
+    console.warn('[push] init failed', err?.code || err?.message || err);
+    return { ok: false, reason: err?.code || 'error' };
+  }
 }
