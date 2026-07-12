@@ -1,38 +1,34 @@
-import { execSync } from 'child_process';
 import puppeteer from 'puppeteer';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { DomMutationError, AuthError } from './errors.js';
 
 /**
- * Resolve the Chromium executable path at runtime rather than hardcoding it.
- * Nixpacks installs chromium via the nix store, whose path can change across
- * rebuilds, so `which chromium` is the reliable way to find it. Falls back to
- * PUPPETEER_EXECUTABLE_PATH (if explicitly set) or a common default.
+ * Resolve the Chromium executable path. Railway's Railpack builder installs
+ * the OS-level libraries a headless browser needs (libnss3, libgtk-3-0, etc.)
+ * but does NOT install a system `chromium` binary — it expects Puppeteer's
+ * own bundled download (fetched automatically into node_modules/.cache during
+ * `npm install puppeteer`). So the default here is to let Puppeteer resolve
+ * its own bundled executable; only override via PUPPETEER_EXECUTABLE_PATH if
+ * you've deliberately configured a system browser instead.
  */
 function resolveChromiumPath() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
   }
-  try {
-    const resolved = execSync('which chromium').toString().trim();
-    if (resolved) return resolved;
-  } catch (err) {
-    logger.warn('Could not resolve chromium via `which` — falling back to default path', {
-      reason: err.message,
-    });
-  }
-  return '/usr/bin/chromium';
+  return undefined; // let Puppeteer use its own bundled Chromium
 }
 
 /** Launch a headless browser instance with server-friendly flags. */
 export async function launchBrowser() {
   const executablePath = resolveChromiumPath();
-  logger.info('Launching browser', { executablePath });
+  logger.info('Launching browser', {
+    executablePath: executablePath || '(puppeteer bundled default)',
+  });
 
   return puppeteer.launch({
     headless: config.headless,
-    executablePath,
+    ...(executablePath ? { executablePath } : {}),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
