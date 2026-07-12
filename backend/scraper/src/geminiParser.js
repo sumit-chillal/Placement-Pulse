@@ -8,6 +8,33 @@ dotenv.config({ path: resolve(__dirname, '..', '.env') });
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// ── Rate limiting ───────────────────────────────────────────────────────
+// Free-tier Gemini caps requests per minute (commonly 10-15 RPM depending on
+// model/tier). Default to a conservative 10 RPM; override via env if your
+// quota is higher. This enforces a minimum gap between consecutive calls so
+// a batch of 70+ fresh rows doesn't blow through quota in a few seconds.
+const RPM = parseInt(process.env.GEMINI_RPM || '10', 10);
+const MIN_INTERVAL_MS = Math.ceil(60000 / Math.max(1, RPM));
+let lastCallAt = 0;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function throttle() {
+  const wait = MIN_INTERVAL_MS - (Date.now() - lastCallAt);
+  if (wait > 0) await sleep(wait);
+  lastCallAt = Date.now();
+}
+
+// ── Retry with exponential backoff for transient/quota errors ────────────
+const MAX_RETRIES = parseInt(process.env.GEMINI_MAX_RETRIES || '4', 10);
+const BASE_BACKOFF_MS = 3000;
+
+function isRetryable(err) {
+  const code = err?.status ?? err?.code ?? null;
+  const msg = String(err?.message || '');
+  return code === 429 || code === 503 || /"code":429/.test(msg) || /"code":503/.test(msg);
+}
+
 // ── Structured-output schema ─────────────────────────────────────────────
 // Forces Gemini to emit JSON matching this exact shape (no prose, no fences).
 const PLACEMENT_SCHEMA = {
@@ -183,24 +210,44 @@ function validateInput(rawText) {
   return trimmed;
 }
 
+async function callGeminiWithRetry(text) {
+  let attempt = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await throttle();
+    try {
+      return await getClient().models.generateContent({
+        model: MODEL,
+        contents: text,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          responseMimeType: 'application/json',
+          responseSchema: PLACEMENT_SCHEMA,
+          temperature: 0.1,
+        },
+      });
+    } catch (err) {
+      attempt += 1;
+      if (!isRetryable(err) || attempt > MAX_RETRIES) {
+        throw err;
+      }
+      const backoff = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+      await sleep(backoff);
+    }
+  }
+}
+
 /**
  * Convert a raw placement notice into a verified, clean metadata object.
+ * Rate-limited and retried internally — safe to call in a tight loop over
+ * many rows without manually pacing calls in the caller.
  * @param {string} rawText
  * @returns {Promise<{companyName,ctc,description,eligibilityCriteria,selectionWorkflow,registrationLink,startDate,endDate}>}
  */
 export async function parsePlacementText(rawText) {
   const text = validateInput(rawText);
 
-  const response = await getClient().models.generateContent({
-    model: MODEL,
-    contents: text,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: 'application/json',
-      responseSchema: PLACEMENT_SCHEMA,
-      temperature: 0.1,
-    },
-  });
+  const response = await callGeminiWithRetry(text);
 
   const out = response.text;
   if (!out || !out.trim()) {
