@@ -3,11 +3,18 @@ import { runScrapeJob } from './src/scraper.js';
 import { closeDb } from './src/db.js';
 import { config } from './src/config.js';
 import { logger } from './src/logger.js';
+import { createApp } from './api/app.js';
+import { connectDatabase, disconnectDatabase } from './api/database.js';
+import { initFirebase } from './api/firebase.js';
 
 // Daytime: every 30 minutes from 08:00 to 19:30 (high cadence).
 const DAY_SCHEDULE = '*/30 8-19 * * *';
 // Nighttime: every 2 hours across 20:00 → 06:00 (reduced load on the portal).
 const NIGHT_SCHEDULE = '0 20,22,0,2,4,6 * * *';
+
+const API_PORT = parseInt(process.env.API_PORT, 10) || 5050;
+
+let apiServer = null;
 
 // Guard against overlapping runs if a previous cycle is still in flight.
 let running = false;
@@ -23,6 +30,33 @@ async function trigger(label) {
   } finally {
     running = false;
   }
+}
+
+/**
+ * Start the internal Express API (POST /api/sync, GET /api/jobs/known, etc.)
+ * on the same container as the scraper. `enrich.js` talks to this over
+ * localhost via SYNC_API_URL — no second Railway service needed.
+ */
+async function startInternalApi() {
+  await connectDatabase({
+    uri: process.env.MONGO_URI,
+    dbName: process.env.DB_NAME || 'placement_scraper',
+  });
+  logger.info('MongoDB (mongoose) connected for internal API');
+
+  try {
+    initFirebase();
+    logger.info('Firebase Admin initialized for internal API');
+  } catch (err) {
+    logger.warn('Firebase init failed — push broadcasts disabled for this API', {
+      reason: err.message,
+    });
+  }
+
+  const app = createApp();
+  apiServer = app.listen(API_PORT, () => {
+    logger.info('Internal sync API listening', { port: API_PORT });
+  });
 }
 
 function start() {
@@ -41,6 +75,8 @@ function start() {
 
 async function shutdown(signal) {
   logger.info('Shutting down scheduler', { signal });
+  if (apiServer) apiServer.close();
+  await disconnectDatabase().catch(() => {});
   await closeDb();
   process.exit(0);
 }
@@ -50,10 +86,18 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 // `--once` runs a single cycle and exits (useful for testing / manual triggers).
 if (process.argv.includes('--once') && !config.runOnBoot) {
-  runScrapeJob()
+  startInternalApi()
+    .then(() => runScrapeJob())
     .then(() => closeDb())
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 } else {
-  start();
+  startInternalApi()
+    .then(() => start())
+    .catch((err) => {
+      logger.error('Failed to start internal API — scraper will still run without sync', {
+        reason: err.message,
+      });
+      start();
+    });
 }
