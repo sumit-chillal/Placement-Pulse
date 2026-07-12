@@ -1,13 +1,38 @@
+import { execSync } from 'child_process';
 import puppeteer from 'puppeteer';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { DomMutationError, AuthError } from './errors.js';
 
+/**
+ * Resolve the Chromium executable path at runtime rather than hardcoding it.
+ * Nixpacks installs chromium via the nix store, whose path can change across
+ * rebuilds, so `which chromium` is the reliable way to find it. Falls back to
+ * PUPPETEER_EXECUTABLE_PATH (if explicitly set) or a common default.
+ */
+function resolveChromiumPath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  try {
+    const resolved = execSync('which chromium').toString().trim();
+    if (resolved) return resolved;
+  } catch (err) {
+    logger.warn('Could not resolve chromium via `which` — falling back to default path', {
+      reason: err.message,
+    });
+  }
+  return '/usr/bin/chromium';
+}
+
 /** Launch a headless browser instance with server-friendly flags. */
 export async function launchBrowser() {
+  const executablePath = resolveChromiumPath();
+  logger.info('Launching browser', { executablePath });
+
   return puppeteer.launch({
     headless: config.headless,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+    executablePath,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

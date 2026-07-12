@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, messaging
+import json
 
 
 ROOT_DIR = Path(__file__).parent
@@ -36,7 +37,7 @@ api_router = APIRouter(prefix="/api")
 # Define Models
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -51,14 +52,31 @@ _fb_app = None
 
 
 def _get_firebase():
+    """
+    Initialize Firebase Admin once, preferring a JSON blob stored directly in
+    an env var (Railway-friendly — no filesystem secret needed), falling back
+    to a local file path for local dev.
+    """
     global _fb_app
-    if _fb_app is None:
-        path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
-        if not path or not os.path.exists(path):
-            raise RuntimeError('Firebase service account not configured')
+
+    if _fb_app is not None:
+        return _fb_app
+
+    # Railway / production: JSON stored as an environment variable.
+    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if service_account_json:
+        cred = credentials.Certificate(json.loads(service_account_json))
+        _fb_app = firebase_admin.initialize_app(cred)
+        return _fb_app
+
+    # Local development: JSON file on disk.
+    path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+    if path and os.path.exists(path):
         cred = credentials.Certificate(path)
         _fb_app = firebase_admin.initialize_app(cred)
-    return _fb_app
+        return _fb_app
+
+    raise RuntimeError("Firebase service account not configured")
 
 
 class TokenIn(BaseModel):
@@ -73,11 +91,11 @@ async def root():
 async def create_status_check(input: StatusCheckCreate):
     status_dict = input.model_dump()
     status_obj = StatusCheck(**status_dict)
-    
+
     # Convert to dict and serialize datetime to ISO string for MongoDB
     doc = status_obj.model_dump()
     doc['timestamp'] = doc['timestamp'].isoformat()
-    
+
     _ = await db.status_checks.insert_one(doc)
     return status_obj
 
@@ -85,12 +103,12 @@ async def create_status_check(input: StatusCheckCreate):
 async def get_status_checks():
     # Exclude MongoDB's _id field from the query results
     status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
+
     # Convert ISO string timestamps back to datetime objects
     for check in status_checks:
         if isinstance(check['timestamp'], str):
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
+
     return status_checks
 
 
@@ -181,6 +199,39 @@ async def unsubscribe(body: TokenIn):
     }
 
 
+@api_router.post("/test-notification")
+async def send_test_notification():
+    """Send a test notification to every device subscribed to the placement_alerts topic."""
+    try:
+        _get_firebase()
+
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title="🎉 Placement Pulse",
+                body="Push notifications are working successfully!",
+            ),
+            data={
+                "type": "test",
+                "title": "Placement Pulse",
+                "body": "Push notifications are working successfully!"
+            },
+            topic=FCM_TOPIC,
+        )
+
+        message_id = messaging.send(message)
+
+        return {
+            "success": True,
+            "message": "Notification sent successfully.",
+            "messageId": message_id,
+            "topic": FCM_TOPIC,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send notification: {str(e)}",
+        )
 
 # Include the router in the main app
 app.include_router(api_router)
