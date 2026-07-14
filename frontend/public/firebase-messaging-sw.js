@@ -27,12 +27,23 @@ messaging.onBackgroundMessage((payload) => {
     tag: data.uniqueHash || "placement-alert",
     renotify: true,
     requireInteraction: true,
-    data: { link: data.registrationLink || "/" },
+    data: { jobId: data.jobId || "" },
   });
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const link = (event.notification.data && event.notification.data.link) || "/";
-  event.waitUntil(clients.openWindow(link));
+  const jobId = event.notification.data && event.notification.data.jobId;
+  const url = jobId ? `/?job=${jobId}` : "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.includes(self.location.origin) && "focus" in c) {
+          c.postMessage({ type: "OPEN_JOB", jobId });
+          return c.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });

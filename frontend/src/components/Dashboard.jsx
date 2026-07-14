@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Bell, GraduationCap, Loader2 } from 'lucide-react';
 import { fetchJobs } from '../lib/api';
 import { initPush } from '../lib/firebasePush';
@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [toDate, setToDate] = useState('');
   const [showExpired, setShowExpired] = useState(false);
   const [alertsOn, setAlertsOn] = useState(false);
+  const [highlightId, setHighlightId] = useState(null);
+  const pendingJobId = useRef(null);
 
   const load = async (expired) => {
     setLoading(true);
@@ -41,6 +43,41 @@ export default function Dashboard() {
       });
     }
   }, []);
+
+  // Deep-link: a notification tap may (a) load the app cold with ?job=<id>
+  // in the URL, or (b) postMessage into an already-open tab via the service
+  // worker. Both paths land here — we just need the target job's data to
+  // exist before we can scroll/highlight it, so we stash the id and resolve
+  // it once `jobs` has loaded.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('job');
+    if (fromUrl) pendingJobId.current = fromUrl;
+
+    const onOpenJob = (e) => {
+      pendingJobId.current = e.detail?.jobId || null;
+      tryFocusPendingJob();
+    };
+    window.addEventListener('pp:openJob', onOpenJob);
+    return () => window.removeEventListener('pp:openJob', onOpenJob);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function tryFocusPendingJob() {
+    const id = pendingJobId.current;
+    if (!id) return;
+    const el = document.getElementById(`job-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightId(id);
+      setTimeout(() => setHighlightId(null), 2500);
+      pendingJobId.current = null;
+    }
+  }
+
+  // Once jobs finish loading, resolve any pending deep-link target.
+  useEffect(() => {
+    if (!loading && jobs.length) tryFocusPendingJob();
+  }, [loading, jobs]);
 
   // High-performance local filtering — fully memoized for smooth re-renders.
   const filtered = useMemo(() => {
@@ -140,7 +177,22 @@ export default function Dashboard() {
         )}
         {!loading &&
           !error &&
-          filtered.map((j) => <JobCard key={j.uniqueHash || j.detailUrl || j.companyName} job={j} />)}
+          filtered.map((j) => {
+            const id = j._id || j.uniqueHash || j.detailUrl;
+            return (
+              <div
+                key={j.uniqueHash || j.detailUrl || j.companyName}
+                id={`job-${id}`}
+                className={
+                  highlightId === String(id)
+                    ? 'rounded-2xl ring-2 ring-teal-300 transition-shadow duration-500'
+                    : ''
+                }
+              >
+                <JobCard job={j} />
+              </div>
+            );
+          })}
       </div>
     </div>
   );

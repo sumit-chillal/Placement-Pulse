@@ -7,17 +7,17 @@ import { createApp } from './api/app.js';
 import { connectDatabase, disconnectDatabase } from './api/database.js';
 import { initFirebase } from './api/firebase.js';
 
-// Daytime: every 30 minutes from 08:00 to 19:30 (high cadence).
-const DAY_SCHEDULE = '*/30 8-19 * * *';
-// Nighttime: every 2 hours across 20:00 → 06:00 (reduced load on the portal).
-const NIGHT_SCHEDULE = '0 20,22,0,2,4,6 * * *';
+// Daytime: every 30 minutes from 08:00 to 23:59 IST.
+const DAY_SCHEDULE = '*/30 8-23 * * *';
+// Nighttime: every 2 hours across 00:00 → 07:59 IST.
+const NIGHT_SCHEDULE = '0 0-7/2 * * *';
 
 const API_PORT = parseInt(process.env.API_PORT, 10) || 5050;
-
 let apiServer = null;
 
 // Guard against overlapping runs if a previous cycle is still in flight.
 let running = false;
+
 async function trigger(label) {
   if (running) {
     logger.warn('Skipping tick — previous run still in progress', { label });
@@ -60,14 +60,15 @@ async function startInternalApi() {
 }
 
 function start() {
-  cron.schedule(DAY_SCHEDULE, () => trigger('day'));
-  cron.schedule(NIGHT_SCHEDULE, () => trigger('night'));
+  // Explicit IST timezone — this is the fix. Without it, Railway's UTC
+  // container clock drove the schedule, offsetting it by 5.5 hours.
+  cron.schedule(DAY_SCHEDULE, () => trigger('day'), { timezone: 'Asia/Kolkata' });
+  cron.schedule(NIGHT_SCHEDULE, () => trigger('night'), { timezone: 'Asia/Kolkata' });
   logger.info('Scheduler armed', {
     day: DAY_SCHEDULE,
     night: NIGHT_SCHEDULE,
-    timezone: process.env.TZ || 'system-local',
+    timezone: 'Asia/Kolkata',
   });
-
   if (config.runOnBoot || process.argv.includes('--once')) {
     trigger('boot');
   }
@@ -80,7 +81,6 @@ async function shutdown(signal) {
   await closeDb();
   process.exit(0);
 }
-
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 

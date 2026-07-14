@@ -16,9 +16,19 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
 
-// Open the registration link when a push notification is tapped.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const link = (event.notification.data && event.notification.data.link) || "/";
-  event.waitUntil(self.clients.openWindow(link));
+  const jobId = event.notification.data && event.notification.data.jobId;
+  const url = jobId ? `/?job=${jobId}` : "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.includes(self.location.origin) && "focus" in c) {
+          c.postMessage({ type: "OPEN_JOB", jobId });
+          return c.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });

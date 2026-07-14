@@ -36,6 +36,10 @@ export function isMessagingReady() {
   return !!messaging;
 }
 
+// Base URL of the deployed PWA — used to build in-app deep links for
+// notification taps instead of sending students straight to an external form.
+const APP_URL = process.env.FRONTEND_URL || 'https://canara-web-app.web.app';
+
 /**
  * Broadcast a newly-saved listing to a global FCM topic. The webpush block
  * is what enables BACKGROUND web push notifications on mobile browsers
@@ -44,15 +48,19 @@ export function isMessagingReady() {
 export async function broadcastJob(job, topic) {
   if (!messaging) initFirebase();
 
-  const title = `New Drive: ${job.companyName}`;
+  const companyName =
+    job.companyName && job.companyName !== '-' ? job.companyName : 'New Placement Update';
+  const title = job.companyName && job.companyName !== '-' ? `New Drive: ${companyName}` : companyName;
   const body = `CTC: ${job.ctc} | Registration closes on ${job.endDate}`;
-  const link = job.registrationLink || '/';
+  const jobId = String(job._id ?? '');
+  const deepLink = jobId ? `${APP_URL}/?job=${jobId}` : APP_URL;
 
   const message = {
     topic,
     notification: { title, body },
     // String-only data payload (FCM requirement) for the service worker.
     data: {
+      jobId,
       companyName: String(job.companyName ?? '-'),
       ctc: String(job.ctc ?? '-'),
       endDate: String(job.endDate ?? '-'),
@@ -64,14 +72,15 @@ export async function broadcastJob(job, topic) {
       notification: {
         title,
         body,
-        icon: '/icons/notification-icon.png',
-        badge: '/icons/badge.png',
+        icon: '/icons/icon-192.png', // was /icons/notification-icon.png — 404, root cause of inconsistent rendering
+        badge: '/icons/icon-192.png', // was /icons/badge.png — 404, same issue
         requireInteraction: true,
         tag: job.uniqueHash || 'placement-alert',
         renotify: true,
+        data: { jobId },
       },
-      // Opens the registration link when the notification is clicked.
-      fcmOptions: { link },
+      // Opens the app's own job card, not the raw external registration link.
+      fcmOptions: { link: deepLink },
     },
   };
 

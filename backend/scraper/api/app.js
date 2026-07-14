@@ -14,8 +14,8 @@ export function createApp() {
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-  // GET /api/jobs — active listings sorted chronologically by endDateISO,
-  // expired drives hidden by default. Paginated.
+  // GET /api/jobs — active listings, newest-posted first, expired drives
+  // hidden by default. Paginated.
   app.get('/api/jobs', async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -33,7 +33,7 @@ export function createApp() {
 
       const [items, total] = await Promise.all([
         Job.find(filter)
-          .sort({ endDateISO: 1, companyName: 1 })
+          .sort({ createdAt: -1 }) // newest posting first (was endDateISO — sorted by soonest-deadline, not newness)
           .skip(skip)
           .limit(limit)
           .lean(),
