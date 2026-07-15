@@ -130,3 +130,43 @@
 ::selection {
   background: rgba(45, 212, 191, 0.3);
 }
+
+/* iOS "Add to Home Screen" install banner — shown only to iOS visitors
+   who haven't installed the PWA yet, since iOS has no automatic install
+   prompt like Android's. */
+.ios-install-banner {
+  position: relative;
+  z-index: 30;
+  background: #178a7a;
+  color: #e6f2ef;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 10px 44px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  text-align: center;
+}
+.ios-install-banner strong {
+  font-weight: 700;
+}
+.ios-install-banner button {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.ios-install-banner button:hover {
+  opacity: 1;
+}

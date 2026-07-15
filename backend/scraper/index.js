@@ -6,11 +6,14 @@ import { logger } from './src/logger.js';
 import { createApp } from './api/app.js';
 import { connectDatabase, disconnectDatabase } from './api/database.js';
 import { initFirebase } from './api/firebase.js';
+import { purgeStaleUndatedJobs } from './src/cleanup.js';
 
 // Daytime: every 30 minutes from 08:00 to 23:59 IST.
 const DAY_SCHEDULE = '*/30 8-23 * * *';
 // Nighttime: every 2 hours across 00:00 → 07:59 IST.
 const NIGHT_SCHEDULE = '0 0-7/2 * * *';
+// Cleanup: once daily, well clear of both windows above.
+const CLEANUP_SCHEDULE = '0 3 * * *';
 
 const API_PORT = parseInt(process.env.API_PORT, 10) || 5050;
 let apiServer = null;
@@ -60,13 +63,13 @@ async function startInternalApi() {
 }
 
 function start() {
-  // Explicit IST timezone — this is the fix. Without it, Railway's UTC
-  // container clock drove the schedule, offsetting it by 5.5 hours.
   cron.schedule(DAY_SCHEDULE, () => trigger('day'), { timezone: 'Asia/Kolkata' });
   cron.schedule(NIGHT_SCHEDULE, () => trigger('night'), { timezone: 'Asia/Kolkata' });
+  cron.schedule(CLEANUP_SCHEDULE, () => purgeStaleUndatedJobs(), { timezone: 'Asia/Kolkata' });
   logger.info('Scheduler armed', {
     day: DAY_SCHEDULE,
     night: NIGHT_SCHEDULE,
+    cleanup: CLEANUP_SCHEDULE,
     timezone: 'Asia/Kolkata',
   });
   if (config.runOnBoot || process.argv.includes('--once')) {

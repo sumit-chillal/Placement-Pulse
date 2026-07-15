@@ -7,7 +7,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let messaging = null;
 
-/** Load the service account from a raw-JSON env var or a file path. */
 function loadServiceAccount() {
   const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (rawJson) return JSON.parse(rawJson);
@@ -21,7 +20,6 @@ function loadServiceAccount() {
   return JSON.parse(fs.readFileSync(path, 'utf-8'));
 }
 
-/** Idempotent Admin SDK init (singleton — safe across hot reloads). */
 export function initFirebase() {
   if (admin.apps.length) {
     messaging = admin.messaging();
@@ -36,15 +34,11 @@ export function isMessagingReady() {
   return !!messaging;
 }
 
-// Base URL of the deployed PWA — used to build in-app deep links for
-// notification taps instead of sending students straight to an external form.
-const APP_URL = process.env.FRONTEND_URL || 'https://canara-web-app.web.app';
+// Base URL of the deployed PWA — used to build ABSOLUTE icon URLs and deep
+// links. FCM webpush icons must be absolute; relative paths render
+// inconsistently across Android OEMs.
+const APP_URL = (process.env.FRONTEND_URL || 'https://canara-web-app.web.app').replace(/\/$/, '');
 
-/**
- * Broadcast a newly-saved listing to a global FCM topic. The webpush block
- * is what enables BACKGROUND web push notifications on mobile browsers
- * (delivered to the service worker even when the tab/app is closed).
- */
 export async function broadcastJob(job, topic) {
   if (!messaging) initFirebase();
 
@@ -54,11 +48,12 @@ export async function broadcastJob(job, topic) {
   const body = `CTC: ${job.ctc} | Registration closes on ${job.endDate}`;
   const jobId = String(job._id ?? '');
   const deepLink = jobId ? `${APP_URL}/?job=${jobId}` : APP_URL;
+  const iconUrl = `${APP_URL}/icons/icon-192.png`;
+  const badgeUrl = `${APP_URL}/icons/badge-96.png`;
 
   const message = {
     topic,
     notification: { title, body },
-    // String-only data payload (FCM requirement) for the service worker.
     data: {
       jobId,
       companyName: String(job.companyName ?? '-'),
@@ -72,14 +67,13 @@ export async function broadcastJob(job, topic) {
       notification: {
         title,
         body,
-        icon: '/icons/icon-192.png', // was /icons/notification-icon.png — 404, root cause of inconsistent rendering
-        badge: '/icons/icon-192.png', // was /icons/badge.png — 404, same issue
+        icon: iconUrl,
+        badge: badgeUrl,
         requireInteraction: true,
         tag: job.uniqueHash || 'placement-alert',
         renotify: true,
         data: { jobId },
       },
-      // Opens the app's own job card, not the raw external registration link.
       fcmOptions: { link: deepLink },
     },
   };

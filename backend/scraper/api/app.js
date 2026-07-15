@@ -5,8 +5,11 @@ import { syncJobs } from './sync.js';
 const TOPIC = process.env.FCM_TOPIC || 'placement_alerts';
 
 /**
- * Express app instance layer — owns routing only. It assumes the database
- * connection has already been established by the bootstrap tier.
+ * Express app instance layer — INTERNAL sync API only (port 5050, localhost).
+ * The public-facing /api/jobs students actually hit lives in backend/server.py
+ * (FastAPI, port from Railway's dynamic-emotion service). This app exists
+ * purely so enrich.js can dedup (/api/jobs/known) and persist+broadcast
+ * (/api/sync) against the same shared MongoDB Atlas cluster.
  */
 export function createApp() {
   const app = express();
@@ -14,8 +17,7 @@ export function createApp() {
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-  // GET /api/jobs — active listings, newest-posted first, expired drives
-  // hidden by default. Paginated.
+  // GET /api/jobs — kept for parity/debugging; NOT what the frontend calls.
   app.get('/api/jobs', async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -27,16 +29,11 @@ export function createApp() {
       if (!includeExpired) {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
-        // Keep drives ending today-or-later, plus those with unknown dates (null).
         filter.$or = [{ endDateISO: { $gte: startOfToday } }, { endDateISO: null }];
       }
 
       const [items, total] = await Promise.all([
-        Job.find(filter)
-          .sort({ createdAt: -1 }) // newest posting first (was endDateISO — sorted by soonest-deadline, not newness)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
+        Job.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
         Job.countDocuments(filter),
       ]);
 
@@ -73,6 +70,19 @@ export function createApp() {
       }
       const summary = await syncJobs(jobs, { topic: TOPIC });
       res.json(summary);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/jobs/purge-undated — deletes jobs with no resolvable end date
+  // older than N days. Called by the daily 3AM IST cleanup cron tick.
+  app.post('/api/jobs/purge-undated', async (req, res, next) => {
+    try {
+      const days = Math.max(1, parseInt(req.body?.olderThanDays, 10) || 30);
+      const cutoff = new Date(Date.now() - days * 864e5);
+      const result = await Job.deleteMany({ endDateISO: null, createdAt: { $lt: cutoff } });
+      res.json({ deleted: result.deletedCount, olderThanDays: days });
     } catch (err) {
       next(err);
     }

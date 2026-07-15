@@ -128,13 +128,18 @@ def _serialize_job(doc: dict) -> dict:
         return v
 
     doc.pop("_id", None)
+    # Internal sort-helper field — never meant for the client.
+    doc.pop("_hasEndDate", None)
     return {k: clean(val) for k, val in doc.items()}
 
 
 @api_router.get("/jobs")
 async def get_jobs(page: int = 1, limit: int = 50, include_expired: bool = False):
-    """Active placement listings, sorted chronologically by endDateISO.
-    Expired drives are hidden by default; drives with unknown dates are kept."""
+    """Active placement listings. Entries with a known end date are shown
+    newest-posted-first; entries with no resolvable end date are pushed to
+    the bottom (still shown, just deprioritized) instead of sorting first,
+    which is what a plain ascending sort on endDateISO used to do since
+    MongoDB orders null before any real date in ascending order."""
     page = max(1, page)
     limit = min(200, max(1, limit))
 
@@ -146,13 +151,18 @@ async def get_jobs(page: int = 1, limit: int = 50, include_expired: bool = False
         query = {"$or": [{"endDateISO": {"$gte": start_of_today}}, {"endDateISO": None}]}
 
     total = await placement_jobs.count_documents(query)
-    cursor = (
-        placement_jobs.find(query)
-        .sort([("endDateISO", 1), ("companyName", 1)])
-        .skip((page - 1) * limit)
-        .limit(limit)
-    )
-    items = [_serialize_job(doc) async for doc in cursor]
+
+    pipeline = [
+        {"$match": query},
+        # hasEndDate: 1 for dated entries, 0 for undated — sorting this
+        # descending puts dated entries first, undated ones last, while
+        # createdAt keeps each group ordered newest-posted-first.
+        {"$addFields": {"_hasEndDate": {"$cond": [{"$eq": ["$endDateISO", None]}, 0, 1]}}},
+        {"$sort": {"_hasEndDate": -1, "createdAt": -1}},
+        {"$skip": (page - 1) * limit},
+        {"$limit": limit},
+    ]
+    items = [_serialize_job(doc) async for doc in placement_jobs.aggregate(pipeline)]
 
     return {
         "page": page,
