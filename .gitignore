@@ -94,6 +94,7 @@ credentials.json
 /*
 
 # 2. Explicitly keep only the required folders and files
+!/docs/
 !/backend/
 !/frontend/
 !/README.md
