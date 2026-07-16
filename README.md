@@ -19,7 +19,7 @@ This project completely eliminates the need for manual portal checking by combin
 <!-- Inline-playable version (recommended): drag demo.mp4 into a new Issue/PR
      comment on GitHub, don't submit it, copy the generated attachment URL,
      and paste it as the src below. -->
-<video src="PASTE_YOUR_GITHUB_USER_ATTACHMENTS_URL_HERE" controls width="480">
+<video src="https://github.com/user-attachments/assets/3050d055-a409-4619-9ec6-e69e03119b13" controls width="480">
   Your browser does not support inline video. Watch it directly: docs/demo.mp4
 </video>
 
